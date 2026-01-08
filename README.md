@@ -2,11 +2,11 @@
 
 This module allows you to control up to **10 Windows PCs** over the local network using a custom Python Agent.
 
-https://github.com/Vit-Di/companion-agent-windows-control#
 
 ## ⚙️ Setup & Configuration
 
-1.  **Install Agent:** Run `AdminAgent.exe` on the target Windows PC.
+1.  **Install Agent:** https://github.com/Vit-Di/companion-agent-windows-control# Run `AdminAgent.exe` on the target Windows PC.
+
 2.  **Dependencies:** Ensure `nircmd.exe` is in the same folder as the agent (required for volume, sleep, and window commands).
 3.  **Firewall:** The agent listens on port **8001**. Ensure this port is open.
 4.  **Companion:** Go to the module configuration and enter the **IP Addresses** of your target PCs.
