@@ -1,0 +1,31 @@
+{
+	"id": "Win-control",
+	"name": "Win control",
+	"shortname": "http",
+	"description": "Module for Bitfocus Companion to remotely control Windows systems via the Windows Control Agent.",
+	"version": "0.0.0",
+	"license": "MIT",
+	"repository": "",
+	"bugs": "",
+	"maintainers": [
+		{
+			"name": "Vitalii Diachuk",
+			"email": "vitaliidiachuk12@gmail.com"
+		}	
+	],
+	"legacyIds": [],
+	"runtime": {
+		"type": "node22",
+		"api": "nodejs-ipc",
+		"apiVersion": "0.0.0",
+		"entrypoint": "../index.js"
+	},
+	"manufacturer": "Win",
+	"products": [
+		"Admin"
+	],
+	"keywords": [
+		"Protocol",
+		"Generic"
+	]
+}
