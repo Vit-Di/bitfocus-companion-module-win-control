@@ -20,12 +20,12 @@
 		"apiVersion": "0.0.0",
 		"entrypoint": "../index.js"
 	},
-	"manufacturer": "Win",
+	"manufacturer": "Vit-Di",
 	"products": [
 		"Admin"
 	],
 	"keywords": [
-		"Protocol",
-		"Generic"
+		"Admin",
+		"Windows"
 	]
 }

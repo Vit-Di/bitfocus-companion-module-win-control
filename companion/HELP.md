@@ -1,47 +1,40 @@
 ## Win-control: Module Overview
 
-Here is the concise, structured English documentation for your module:
+# Windows Control Agent
 
-🚀 Win-control: Module Overview
-This module provides full remote control over your PC through the network. Below is a breakdown of all available features:
+This module allows you to control up to **10 Windows PCs** over the local network using a custom Python Agent.
 
-🔌 Power & System Control
-Shutdown: Remotely power off the PC.
+## ⚙️ Setup & Configuration
 
-Restart: Quickly reboot the system.
+1.  **Install Agent:** Run `AdminAgent.exe` on the target Windows PC.
+2.  **Dependencies:** Ensure `nircmd.exe` is in the same folder as the agent (required for volume, sleep, and window commands).
+3.  **Firewall:** The agent listens on port **8001**. Ensure this port is open.
+4.  **Companion:** Go to the module configuration and enter the **IP Addresses** of your target PCs.
 
-Force Mode: Force power actions (ignores unsaved data warnings) for reliable automation.
+## 🚀 Features
 
-📂 App & Process Management
-Start App: Launch any software via its file path with optional arguments.
+### App & Window Control
+* **Start App:** Launch applications from a scanned list of installed software or by specifying a manual path (`.exe`).
+* **Universal Control:** Focus, Minimize, Maximize, Restore, or Kill specific processes (e.g., `obs64.exe`).
+* **Web:** Open URLs in the default browser.
 
-Close Window: Gently close the active window of a specific program.
+### Input Simulation
+* **Keyboard:**
+    * Press single keys (e.g., `F5`, `Space`).
+    * Send Hotkeys (e.g., `Ctrl+Shift+S`).
+    * **Type Text:** Send text strings (supports Unicode/Cyrillic).
+* **Mouse:** Move cursor to X/Y coordinates, Left/Right Click, Double Click.
 
-Kill Process: Force-stop any process by its .exe name (useful for frozen apps).
+### System Commands
+* **Power:** Shutdown, Reboot, Sleep, Lock, Sign Out.
+* **Utilities:** Open Task Manager, Device Manager, Settings, File Explorer.
+* **Screenshots:** Take a full-screen screenshot or open the Snippet Tool.
 
-Window States: Minimize, Maximize, Restore, or Focus (bring to front) any application.
+### 📊 Feedback (Variables)
+The module provides real-time feedback variables for each PC:
+* `$(Admin:pc1_name)` - PC Name
+* `$(Admin:pc1_cpu)` - CPU Usage (%)
+* `$(Admin:pc1_ram)` - RAM Usage (%)
 
-🖱 Mouse & Keyboard Emulation
-Clicks: Perform Left Click, Double Click, or Right Click.
 
-Movement: Instantly move the cursor to specific X / Y coordinates.
-
-Type Text: Input text directly into active fields (supports Unicode/Multilingual characters).
-
-Hotkeys: Trigger system keys or complex keyboard combinations.
-
-Volume: Adjust system volume or toggle Mute instantly.
-
-📊 Live Telemetry (Companion Variables)
-System Status: Real-time monitoring of CPU and RAM usage.
-
-Cursor Tracking: Get the current position of the mouse.
-
-Process Watcher: Check if a specific program is currently running.
-
-📋 Ready-to-Use Button Tags
-Copy and paste these into the Button Text field in Companion:
-
-PC Status: $(admin:pc1_name)\nCPU:$(admin:pc1_cpu)%\nRAM:$(admin:pc1_ram)%
-
-Mouse Position: X:$(admin:pc1_mouse_x)\nY:$(admin:pc1_mouse_y)
+**Note:** Buttons mapped to specific processes will turn **Green** if that process is running on the target PC.

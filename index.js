@@ -6,14 +6,17 @@ class ChurchInstance extends InstanceBase {
 	async init(config) {
 		this.config = config
 		this.pcStats = {}
-		this.processChoices = [{ id: 'obs64.exe', label: 'Waiting for scan...' }]
+		
+		// ДВА РІЗНІ СПИСКИ
+		this.processChoices = [{ id: 'obs64.exe', label: 'Waiting for scan...' }] // Для запущених (керування)
+		this.appChoices = [{ id: 'manual', label: 'Waiting for scan...' }]     // Для встановлених (запуск)
 		
 		this.initVariables()
 		this.initFeedbacks()
 		this.initActions()
 		
 		this.startPolling()
-		this.startProcessScan()
+		this.startProcessScan() // Запускає обидва сканери
 	}
 
 	async configUpdated(config) {
@@ -37,21 +40,31 @@ class ChurchInstance extends InstanceBase {
 	// --- 1. ШВИДКЕ ОПИТУВАННЯ (1 сек) ---
 	startPolling() {
 		this.pollTimer = setInterval(async () => {
-			for (let i = 1; i <= 5; i++) await this.checkPC(i)
+			for (let i = 1; i <= 10; i++) await this.checkPC(i)
 		}, 1000)
 	}
 	stopPolling() { if (this.pollTimer) clearInterval(this.pollTimer) }
 
-	// --- 2. СКАНЕР ПРОЦЕСІВ (15 сек) ---
+	// --- 2. СКАНЕРИ (РОЗДІЛЕНІ) ---
 	startProcessScan() {
-		this.scanProcesses()
-		this.scanTimer = setInterval(() => this.scanProcesses(), 15000)
-	}
-	stopProcessScan() { if (this.scanTimer) clearInterval(this.scanTimer) }
+		// Запускаємо миттєво при старті
+		this.scanRunningProcesses()
+		this.scanInstalledApps()
 
-	async scanProcesses() {
+		// Таймери
+		this.scanTimerProc = setInterval(() => this.scanRunningProcesses(), 15000) // Процеси часто (15с)
+		this.scanTimerApps = setInterval(() => this.scanInstalledApps(), 60000)    // Програми рідко (60с)
+	}
+
+	stopProcessScan() { 
+		if (this.scanTimerProc) clearInterval(this.scanTimerProc)
+		if (this.scanTimerApps) clearInterval(this.scanTimerApps)
+	}
+
+	// А) Скануємо ЗАПУЩЕНІ процеси (Для Universal Control і Feedback)
+	async scanRunningProcesses() {
 		let allProcs = new Set()
-		for (let i = 1; i <= 5; i++) {
+		for (let i = 1; i <= 10; i++) {
 			const ip = this.config[`pc${i}_ip`]; const port = this.config[`pc${i}_port`]
 			if (!ip) continue
 			try {
@@ -64,7 +77,31 @@ class ChurchInstance extends InstanceBase {
 			const sortedProcs = Array.from(allProcs).sort()
 			this.processChoices = sortedProcs.map(proc => ({ id: proc, label: proc }))
 			this.processChoices.unshift({ id: 'manual', label: '-- TYPE MANUALLY --' })
-			this.initActions()
+			this.initActions() // Оновлюємо списки в діях
+		}
+	}
+
+	// Б) Скануємо ВСТАНОВЛЕНІ програми (Тільки для запуску)
+	async scanInstalledApps() {
+		let allApps = new Map()
+		for (let i = 1; i <= 10; i++) {
+			const ip = this.config[`pc${i}_ip`]; const port = this.config[`pc${i}_port`]
+			if (!ip) continue
+			try {
+				const res = await got.get(`http://${ip}:${port}/apps/list`, { timeout: { request: 5000 } })
+				const data = JSON.parse(res.body)
+				if (data.apps) {
+					data.apps.forEach(app => {
+						if (!allApps.has(app.path)) allApps.set(app.path, app.name)
+					})
+				}
+			} catch (e) {}
+		}
+		if (allApps.size > 0) {
+			const sortedApps = Array.from(allApps.entries()).sort((a, b) => a[1].localeCompare(b[1]))
+			this.appChoices = sortedApps.map(([path, name]) => ({ id: path, label: name }))
+			this.appChoices.unshift({ id: 'manual', label: '-- MANUAL PATH --' })
+			this.initActions() // Оновлюємо списки в діях
 		}
 	}
 
@@ -95,7 +132,7 @@ class ChurchInstance extends InstanceBase {
 	}
 
 	initVariables() {
-		const vars = []; for(let i=1; i<=5; i++) {
+		const vars = []; for(let i=1; i<=10; i++) {
 			vars.push(
 				{name:`PC${i} Name`, variableId:`pc${i}_name`}, 
 				{name:`PC${i} CPU`, variableId:`pc${i}_cpu`}, 
@@ -108,7 +145,7 @@ class ChurchInstance extends InstanceBase {
 	}
 
 	initFeedbacks() {
-		const pcs = []; for(let i=1; i<=5; i++) pcs.push({id:`pc${i}`, label:this.config[`pc${i}_name`]||`PC ${i}`})
+		const pcs = []; for(let i=1; i<=10; i++) pcs.push({id:`pc${i}`, label:this.config[`pc${i}_name`]||`PC ${i}`})
 		this.setFeedbackDefinitions({
 			status: { type:'boolean', name:'System: Connection Status', defaultStyle:{bgcolor:0xff0000, color:0xffffff}, options:[{type:'dropdown',label:'PC',id:'pc',default:'pc1',choices:pcs}], callback:(fb)=>{const i=fb.options.pc.replace('pc',''); return this.pcStats[i]&&!this.pcStats[i].online} },
 			cpu_alert: { type:'boolean', name:'Alert: High CPU', defaultStyle:{bgcolor:0xff8800, color:0x000000}, options:[{type:'dropdown',label:'PC',id:'pc',default:'pc1',choices:pcs}, {type:'number',label:'Limit %',id:'limit',default:90}], callback:(fb)=>{const i=fb.options.pc.replace('pc',''); const s=this.pcStats[i]; return s&&s.online&&s.cpu>fb.options.limit} },
@@ -118,7 +155,56 @@ class ChurchInstance extends InstanceBase {
 	}
 
 	getConfigFields() {
-		const f=[{type:'static-text',id:'i',label:'Setup',value:'Port 8001'}]; for(let i=1; i<=5; i++) f.push({type:'textinput',id:`pc${i}_name`,label:`PC ${i} Name`,width:6,default:`PC ${i}`}, {type:'textinput',id:`pc${i}_ip`,label:`IP`,width:6,default:'127.0.0.1',regex:this.REGEX_IP}, {type:'textinput',id:`pc${i}_port`,label:`Port`,width:4,default:'8001',regex:this.REGEX_PORT}); return f
+		const fields = [
+			{
+				type: 'static-text',
+				id: 'info',
+				width: 12,
+				label: 'Information',
+				value: 'Make sure the Agent is running on the target PCs on port 8001.'
+			}
+		]
+
+		for (let i = 1; i <= 10; i++) {
+			fields.push(
+				// 1. ЗАГОЛОВОК І ЛІНІЯ (Відділяє блоки візуально)
+				{
+					type: 'static-text',
+					id: `sep_${i}`,
+					width: 12,
+					label: '',
+					value: `<hr><h4>🖥️ PC ${i} Configuration</h4>`
+				},
+				// 2. НАЗВА (На весь рядок, щоб було гарно)
+				{
+					type: 'textinput',
+					id: `pc${i}_name`,
+					label: `Name (Friendly Name)`,
+					width: 12,
+					default: `PC ${i}`
+				},
+				// 3. IP АДРЕСА (Широке поле - 8/12)
+				{
+					type: 'textinput',
+					id: `pc${i}_ip`,
+					label: `IP Address`,
+					width: 8,
+					default: '',
+					regex: this.REGEX_IP
+				},
+				// 4. ПОРТ (Вузьке поле поруч з IP - 4/12)
+				{
+					type: 'textinput',
+					id: `pc${i}_port`,
+					label: `Port`,
+					width: 4,
+					default: '8001',
+					regex: this.REGEX_PORT
+				}
+			)
+		}
+
+		return fields
 	}
 
 	async send(pcId, ep, body) {
@@ -127,9 +213,13 @@ class ChurchInstance extends InstanceBase {
 	}
 
 	initActions() {
-		const pcs = []; for(let i=1; i<=5; i++) pcs.push({id:`pc${i}`, label:this.config[`pc${i}_name`]||`PC ${i}`})
-		
-		const procList = (this.processChoices && this.processChoices.length > 0) ? this.processChoices : [{ id: 'obs64.exe', label: 'Waiting for scan...' }]
+		const pcs = []; for(let i=1; i<=10; i++) pcs.push({id:`pc${i}`, label:this.config[`pc${i}_name`]||`PC ${i}`})
+
+		// Переконайся, що тут використовується processChoices (старий список)
+		const procListRunning = (this.processChoices && this.processChoices.length > 0) ? this.processChoices : [{ id: 'obs64.exe', label: 'Waiting for scan...' }]
+
+		// А тут новий список для програм
+		const appListInstalled = (this.appChoices && this.appChoices.length > 0) ? this.appChoices : [{ id: 'manual', label: 'Waiting for scan...' }]
 		
 		// Список популярних клавіш (Клавіатура)
 		const keyList = [
@@ -164,12 +254,13 @@ class ChurchInstance extends InstanceBase {
 				}
 			},
 
-			// --- 2. УНІВЕРСАЛЬНИЙ КОНТРОЛЕР ---
+			// --- 2. УНІВЕРСАЛЬНИЙ КОНТРОЛЕР (Використовує ЗАПУЩЕНІ процеси) ---
 			universal_control: {
 				name: 'App: Universal Control (Window, Kill)',
 				options: [
 					{type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs},
-					{type:'dropdown', label:'Select Process', id:'proc_menu', default: procList[0].id, choices: procList, allowCustom: true},
+					// ТУТ БЕРЕМО СПИСОК ПРОЦЕСІВ
+					{type:'dropdown', label:'Select Process', id:'proc_menu', default: procListRunning[0].id, choices: procListRunning, allowCustom: true},
 					{type:`textinput`, label:'Or Type Name (if Manual)', id:'proc_manual', isVisible: (opt) => opt.proc_menu === 'manual'},
 					{type:'dropdown', label:'Action', id:'act', default:'focus', choices:[
 						{id:'focus', label:'🔍 Focus Window'},
@@ -186,13 +277,105 @@ class ChurchInstance extends InstanceBase {
 				}
 			},
 
+            // ... (інші дії) ...
+
+			// --- 3.12 ЗАПУСК: ВАРІАНТ 2 (ЗІ СПИСКУ ВСТАНОВЛЕНИХ) ---
+			app_start_list: {
+				name: 'App: Start from Scanned List',
+				options: [
+					{type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs},
+					// ТУТ БЕРЕМО СПИСОК ПРОГРАМ (Installed)
+					{type:'dropdown', label:'Select App', id:'proc', default: appListInstalled[0].id, choices: appListInstalled, allowCustom: true}, 
+					{type:'textinput', label:'Arguments', id:'args', default:''}
+				],
+				callback: async(act) => {
+					await this.send(act.options.pc, '/apps/start', {path:act.options.proc, args:act.options.args})
+				}
+			},
+
+			// --- НОВІ ОКРЕМІ БЛОКИ ---
+
+			// 3.1. Ввід тексту (Окремий блок)
+			text_input: {
+				name: 'System: Type Text',
+				options: [
+					{type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs},
+					{type:'textinput', label:'Text to Type', id:'text', default:''}
+				],
+				callback: async(act) => await this.send(act.options.pc, '/keyboard/action', {action:'type', text:act.options.text})
+			},
+
+			// 3.2. Згортання всіх вікон (Win+D)
+			minimize_all: {
+				name: 'System: Minimize All Windows ',
+				options: [ {type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs} ],
+				callback: async(act) => await this.send(act.options.pc, '/keyboard/action', {action:'hotkey', text:'lwin+d'})
+			},
+
+			// 3.3. Скрін екрану фул (PrintScreen)
+			screenshot_full: {
+				name: 'System: Screenshot (Full Screen)',
+				options: [ {type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs} ],
+				// lwin+printscreen зберігає файл у папку зображень, просто printscreen - у буфер
+				callback: async(act) => await this.send(act.options.pc, '/keyboard/action', {action:'hotkey', text:'printscreen'})
+			},
+
+			// 3.4. Скрін екрану з вибором (Win+Shift+S)
+			screenshot_area: {
+				name: 'System: Screenshot Snippet ',
+				options: [ {type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs} ],
+				callback: async(act) => await this.send(act.options.pc, '/keyboard/action', {action:'hotkey', text:'lwin+shift+s'})
+			},
+
+			// 3.5. Перемикання віртуальних робочих столів
+			virtual_desktop: {
+				name: 'System: Switch Virtual Desktop',
+				options: [
+					{type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs},
+					{type:'dropdown', label:'Direction', id:'dir', default:'right', choices:[{id:'left',label:'Previous (Left)'}, {id:'right',label:'Next (Right)'}]}
+				],
+				callback: async(act) => await this.send(act.options.pc, '/keyboard/action', {action:'hotkey', text:`ctrl+lwin+${act.options.dir}`})
+			},
+
+			// 3.6 - 3.9 Системні вікна (Task Manager, Device Manager, Settings, Explorer)
+			system_window: {
+				name: 'System: Open System Utility',
+				options: [
+					{type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs},
+					{type:'dropdown', label:'Utility', id:'util', default:'explorer', choices:[
+						{id:'taskmgr', label:'Task Manager (Ctrl+Shift+Esc)'},
+						{id:'devmgr', label:'Device Manager (Command)'},
+						{id:'settings', label:'Settings (Win+I)'},
+						{id:'explorer', label:'File Explorer (Win+E)'}
+					]}
+				],
+				callback: async(act) => {
+					const util = act.options.util;
+					if (util === 'taskmgr') await this.send(act.options.pc, '/keyboard/action', {action:'hotkey', text:'ctrl+shift+esc'});
+					else if (util === 'settings') await this.send(act.options.pc, '/keyboard/action', {action:'hotkey', text:'lwin+i'});
+					else if (util === 'explorer') await this.send(act.options.pc, '/keyboard/action', {action:'hotkey', text:'lwin+e'});
+					else if (util === 'devmgr') await this.send(act.options.pc, '/apps/start', {path:'devmgmt.msc', args:''});
+				}
+			},
+
+			// 3.10 Відкриття вебсайтів
+			open_website: {
+				name: 'App: Open Website',
+				options: [
+					{type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs},
+					{type:'textinput', label:'URL', id:'url', default:'https://google.com'}
+				],
+				// Використовуємо команду start для відкриття дефолтного браузера
+				callback: async(act) => await this.send(act.options.pc, '/apps/start', {path:'explorer', args:act.options.url})
+			},
+
+			
+
 			// --- 3. МИШКА (КЛІК + РУХ + ЗАТРИМКА) ---
 			mouse_click: {
 				name: 'Mouse: Click at Coordinates',
 				options: [
 					{type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs},
-					
-					{type:'static-text', id:'info', label:'Find Coords', value:'Check variables $(admin:pc1_mouse_x)'},
 					
 					{type:'number', label:'X Coordinate', id:'x', default: 0, min: -10000, max: 10000},
 					{type:'number', label:'Y Coordinate', id:'y', default: 0, min: -10000, max: 10000},
@@ -207,7 +390,6 @@ class ChurchInstance extends InstanceBase {
 				callback: async(act) => await this.send(act.options.pc, '/mouse/action', {x:act.options.x, y:act.options.y, action:act.options.type, delay:act.options.delay})
 			},
 
-			// --- 4. ЗАПУСК ---
 			app_start: {
 				name: 'App: Start',
 				options: [
@@ -218,13 +400,19 @@ class ChurchInstance extends InstanceBase {
 				callback: async(act) => await this.send(act.options.pc, '/apps/start', {path:act.options.path, args:act.options.args})
 			},
 
-			// --- 5. ЖИВЛЕННЯ ---
+			// --- 5. ЖИВЛЕННЯ (Оновлено) ---
 			power: {
-				name: 'System: Power',
+				name: 'System: Power Control',
 				options: [
 					{type:'dropdown', label:'PC', id:'pc', default:'pc1', choices:pcs},
-					{type:'dropdown', label:'Action', id:'act', choices:[{id:'reboot',label:'Reboot'},{id:'shutdown',label:'Shutdown'}], default:'reboot'},
-					{type:'checkbox', label:'Force', id:'force', default:false}
+					{type:'dropdown', label:'Action', id:'act', default:'lock', choices:[
+						{id:'lock',label:'🔒 Lock PC'},
+						{id:'sleep',label:'🌙 Sleep'},
+						{id:'logout',label:'👋 Sign Out'},
+						{id:'reboot',label:'🔄 Reboot'},
+						{id:'shutdown',label:'🛑 Shutdown'}
+					]},
+					{type:'checkbox', label:'Force (for Reboot/Shutdown)', id:'force', default:false}
 				],
 				callback: async(act) => await this.send(act.options.pc, '/system/power', {action:act.options.act, force:act.options.force})
 			}
