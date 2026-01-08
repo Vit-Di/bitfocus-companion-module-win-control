@@ -2,6 +2,8 @@
 
 This module allows you to control up to **10 Windows PCs** over the local network using a custom Python Agent.
 
+https://github.com/Vit-Di/companion-agent-windows-control#
+
 ## ⚙️ Setup & Configuration
 
 1.  **Install Agent:** Run `AdminAgent.exe` on the target Windows PC.
